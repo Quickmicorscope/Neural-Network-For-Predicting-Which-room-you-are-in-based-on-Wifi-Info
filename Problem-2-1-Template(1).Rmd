@@ -1,0 +1,301 @@
+---
+title: "Homework 8"
+output:
+  html_notebook: null
+  toc: yes
+  html_document:
+    df_print: paged
+toc_float: yes
+---   
+```{r}
+
+
+library(tensorflow)
+#install_tensorflow()
+library(keras)
+library(dplyr)
+library(caret)
+library(rpart)
+library(rpart.plot)
+
+rm(list=ls())
+
+
+```
+
+
+```{r}
+
+
+# Set working directory as needed
+setwd("C:/Users/sakhe/Desktop/CS/CS422")
+
+df <- read.csv("wifi_localization2.csv", header = TRUE, sep = ",")
+
+# Seed the PRNG
+set.seed(1122)
+df <- df[sample(nrow(df)), ] # Shuffle, as all of the data in the .csv file
+                             # is ordered by label!
+
+
+```
+
+## Part(a)
+```{r}
+  
+  split_ratio <- 0.8
+  train_index <- sample(1:nrow(df), size = round(nrow(df) * split_ratio))
+  train_df <- df[train_index, ]
+  test_df <- df[-train_index, ]
+  
+  
+  dt_model <- rpart(room ~ ., data = train_df, method = "class")
+  rpart.plot(dt_model, extra = 106)
+  
+  
+  predictions <- predict(dt_model, test_df, type = "class")
+
+
+confusion_mtx <- caret::confusionMatrix(predictions, as.factor(test_df$room))
+
+print(confusion_mtx)
+
+
+overall_accuracy <- confusion_mtx$overall['Accuracy']
+sensitivity <- confusion_mtx$byClass[, 'Sensitivity']
+specificity <- confusion_mtx$byClass[, 'Specificity']
+ppv <- confusion_mtx$byClass[, 'Pos Pred Value']
+bal_acc <- (sensitivity + specificity) / 2
+
+cat("Decision Tree Model\n")
+cat("Overall accuracy: ", round(overall_accuracy * 100, 2), "\n")
+cat("Sensitivity Class 1:", round(sensitivity[1] * 100, 2), "Class 2:", round(sensitivity[2] * 100, 2),
+    "Class 3:", round(sensitivity[3] * 100, 2), "Class 4:", round(sensitivity[4] * 100, 2), "\n")
+cat("Specificity Class 1:", round(specificity[1] * 100, 2), "Class 2:", round(specificity[2] * 100, 2),
+    "Class 3:", round(specificity[3] * 100, 2), "Class 4:", round(specificity[4] * 100, 2), "\n")
+cat("PPV Class 1:", round(ppv[1] * 100, 2), "Class 2:", round(ppv[2] * 100, 2),
+    "Class 3:", round(ppv[3] * 100, 2), "Class 4:", round(ppv[4] * 100, 2), "\n")
+cat("Bal. Acc. Class 1:", round(bal_acc[1] * 100, 2), "Class 2:", round(bal_acc[2] * 100, 2),
+    "Class 3:", round(bal_acc[3] * 100, 2), "Class 4:", round(bal_acc[4] * 100, 2), "\n")
+
+
+
+
+x_train <- as.matrix(train_df[, -ncol(train_df)])
+y_train <- to_categorical(train_df$room - 1)
+x_test <- as.matrix(test_df[, -ncol(test_df)])
+y_test <- to_categorical(test_df$room - 1)
+
+
+nn_model <- keras_model_sequential() %>%
+  layer_dense(units = 128, activation = 'relu', input_shape = ncol(x_train)) %>%
+  layer_dense(units = 64, activation = 'relu') %>%
+  layer_dense(units = 4, activation = 'softmax')
+
+
+nn_model %>% compile(
+  loss = 'categorical_crossentropy',
+  optimizer = 'adam',
+  metrics = c('accuracy')
+)
+
+
+history <- nn_model %>% fit(
+  x_train, y_train,
+  epochs = 100,
+  batch_size = 32,
+  validation_split = 0.2,
+  verbose = 2
+)
+
+
+score <- nn_model %>% evaluate(x_test, y_test, verbose = 0)
+cat('Test loss:', score[1], '\n')
+cat('Test accuracy:', score[2], '\n')
+
+
+```
+
+## Part(b)
+# (b)
+# Note that in (b) either use a new variable to store the model, or null out
+# the variable that stored the model in (a) if you want to reuse that variable.
+# The reason is that if you don't null it out, the model in (b) will have
+# residual information left over from (a) and your results will not be quite
+# accurate.
+```{r}
+nn_model_b <- keras_model_sequential() %>%
+  layer_dense(units = 1, activation = 'relu', input_shape = ncol(x_train)) %>%
+  layer_dense(units = 4, activation = 'softmax')
+
+
+nn_model_b %>% compile(
+  loss = 'categorical_crossentropy',
+  optimizer = 'adam',
+  metrics = c('accuracy')
+)
+
+
+history_b <- nn_model_b %>% fit(
+  x_train, y_train,
+  epochs = 100,
+  batch_size = 32,
+  validation_split = 0.2,
+  verbose = 2
+)
+
+score_b <- nn_model_b %>% evaluate(x_test, y_test, verbose = 0)
+
+predicted_labels_b <- nn_model_b %>% predict(x_test) %>% k_argmax()
+
+predicted_labels_b <- as.factor(as.vector(predicted_labels_b))
+test_labels_b <- as.factor(test_df$room - 1)
+
+confusion_mtx_b <- caret::confusionMatrix(predicted_labels_b, test_labels_b)
+print(confusion_mtx_b)
+```
+## Part (bi)
+```{r}
+cat('For one neuron in hidden layer, loss:', score_b[1], ', Accuracy:', score_b[2], '\n')
+
+```
+
+## Part (bii)
+```{r}
+cat("The accuracy is low because the neural network is too simple with only one neuron in the hidden layer. It lacks the capacity to learn complex patterns in the data.")
+```
+## Part (biii)
+```{r}
+cat("I dont see a pattern in the predicted labels.")
+```
+
+## Part(biv)
+```{r}
+cat("The bias of the model is likely high, because it's a simple model and it probably underfits the data. It does not have enough capacity to capture the complexity of the problem.")
+```
+
+## Part(bv)
+```{r}
+cat("Training the model for 200 epochs might not necessarily improve the results significantly, as the issue is with the model's simplicity, not the amount of training. A more complex model with more neurons or layers would likely help improve the results.")
+```
+
+
+
+
+
+
+## Part(c)
+```{r}
+best_nn_model_c <- NULL
+best_neurons <- 0
+best_accuracy <- 0
+
+for (neurons in c(5, 10, 20, 40, 80, 160, 320)) {
+  
+  nn_model_c <- keras_model_sequential() %>%
+    layer_dense(units = neurons, activation = 'relu', input_shape = ncol(x_train)) %>%
+    layer_dense(units = 4, activation = 'softmax')
+
+  nn_model_c %>% compile(
+    loss = 'categorical_crossentropy',
+    optimizer = 'adam',
+    metrics = c('accuracy')
+  )
+
+  history_c <- nn_model_c %>% fit(
+    x_train, y_train,
+    epochs = 100,
+    batch_size = 32,
+    validation_split = 0.2,
+    verbose = 0
+  )
+
+  score_c <- nn_model_c %>% evaluate(x_test, y_test, verbose = 0)
+
+  if (score_c[[2]] > best_accuracy) {
+    best_nn_model_c <- nn_model_c
+    best_neurons <- neurons
+    best_accuracy <- score_c[[2]]
+  }
+}
+
+cat('Best model has', best_neurons, 'neurons in the hidden layer.\n')
+
+
+```
+## Part(ci)
+
+```{r}
+cat('In this model, loss:', score_c[[1]], ', Accuracy:', score_c[[2]], '\n')
+
+```
+
+## Part(cii)
+```{r}
+cat("The bias of the model is likely to be low or just about right, as it has a high accuracy on the test set. The model is now more complex and can capture the patterns in the data better than the simpler model.")
+
+```
+
+## part(ciii)
+```{r}
+
+plot(history_c$metrics$accuracy, main = "Accuracy and Validation Accuracy vs. Epoch", xlab = "Epoch", ylab = "Accuracy", type = "l", col = "blue")
+lines(history_c$metrics$val_accuracy, col = "red")
+legend("bottomright", legend = c("Training accuracy", "Validation accuracy"), col = c("blue", "red"), lty = 1)
+
+
+best_epoch <- which.max(history_c$metrics$val_accuracy)
+cat("We should stop training at epoch", best_epoch, "to minimize overfitting.\n")
+
+```
+
+
+
+## Part(d)
+```{r}
+# Predict labels for the test data using the best model
+predicted_labels_c <- best_nn_model_c %>% predict(x_test) %>% k_argmax()
+
+
+predicted_labels_c <- as.factor(as.vector(predicted_labels_c))
+test_labels_c <- as.factor(test_df$room - 1)
+
+
+confusion_mtx_c <- caret::confusionMatrix(predicted_labels_c, test_labels_c)
+print(confusion_mtx_c)
+
+#confusion matx
+overall_accuracy_c <- confusion_mtx_c$overall['Accuracy']
+sensitivity_c <- confusion_mtx_c$byClass[, 'Sensitivity']
+specificity_c <- confusion_mtx_c$byClass[, 'Specificity']
+ppv_c <- confusion_mtx_c$byClass[, 'Pos Pred Value']
+bal_acc_c <- (sensitivity_c + specificity_c) / 2
+
+cat("Best Neural Network Model\n")
+cat("Overall accuracy: ", round(overall_accuracy_c * 100, 2), "\n")
+cat("Sensitivity Class 1:", round(sensitivity_c[1] * 100, 2), "Class 2:", round(sensitivity_c[2] * 100, 2),
+    "Class 3:", round(sensitivity_c[3] * 100, 2), "Class 4:", round(sensitivity_c[4] * 100, 2), "\n")
+cat("Specificity Class 1:", round(specificity_c[1] * 100, 2), "Class 2:", round(specificity_c[2] * 100, 2),
+    "Class 3:", round(specificity_c[3] * 100, 2), "Class 4:", round(specificity_c[4] * 100, 2), "\n")
+cat("PPV Class 1:", round(ppv_c[1] * 100, 2), "Class 2:", round(ppv_c[2] * 100, 2),
+    "Class 3:", round(ppv_c[3] * 100, 2), "Class 4:", round(ppv_c[4] * 100, 2), "\n")
+cat("Bal. Acc. Class 1:", round(bal_acc_c[1] * 100, 2), "Class 2:", round(bal_acc_c[2] * 100, 2),
+    "Class 3:", round(bal_acc_c[3] * 100, 2), "Class 4:", round(bal_acc_c[4] * 100, 2), "\n")
+
+```
+
+## Part(di)
+```{r}
+cat("Comparing the output of the decision tree model in (a) to the best neural network model in (c), we can see that the best neural network model has a higher overall accuracy, better sensitivity, specificity, PPV, and balanced accuracy for each class. This indicates that the best neural network model performs better at classifying the samples in the test dataset.")
+
+```
+
+## Part(dii)
+```{r}
+cat("If I had to deploy one of these two models in production, I would choose the best neural network model from part (c). The reason is that it has a higher overall accuracy, better sensitivity, specificity, PPV, and balanced accuracy for each class, which indicates that it's more effective at classifying samples. The neural network model is more likely to provide better results in a real-world scenario.")
+
+```
+
+
+
+# (d)
